@@ -63,6 +63,11 @@ def active_session_usernames() -> list[str]:
     return sorted(_active_sessions)
 
 
+def register_active_session(username: str, expires_at_timestamp: float) -> None:
+    """API pública para registrar sesiones (evita tocar el dict privado)."""
+    _active_sessions[username] = expires_at_timestamp
+
+
 def create_liveness_challenge() -> tuple[str, list[str]]:
     global _last_liveness_actions
     actions = list(LIVENESS_ACTIONS)

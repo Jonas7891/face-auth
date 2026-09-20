@@ -79,7 +79,7 @@ class SessionService:
             device_hash=device_hash,
         )
         # Compat: mantiene el directorio de sesiones activas legacy.
-        legacy_auth._active_sessions[username] = (now + timedelta(seconds=access_ttl)).timestamp()
+        legacy_auth.register_active_session(username, (now + timedelta(seconds=access_ttl)).timestamp())
         self._prune()
         return {
             "access_token": access,

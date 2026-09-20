@@ -15,7 +15,7 @@ from ...application.use_cases.register_fingerprint import RegisterFingerprint
 from ..persistence.biometric_user_repository import BiometricUserRepository
 from ..persistence.mongodb_biometric_repository import MongoDBBiometricRepository
 from ..persistence.postgres_user_repository import PostgresUserRepository
-from ..security.audit import InMemoryAuditSink, MongoAuditSink
+from ..security.audit import MongoAuditSink
 from ..security.rate_limit import RateLimiter
 from .settings import settings
 
