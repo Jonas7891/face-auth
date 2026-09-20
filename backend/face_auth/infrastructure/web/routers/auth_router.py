@@ -58,7 +58,7 @@ def liveness_challenge() -> dict[str, object]:
     return {"challenge_token": token, "actions": actions}
 
 
-@router.post("/api/face/liveness-step")
+@router.post("/api/face/liveness-step", dependencies=[Depends(rate_limit("liveness_step"))])
 def liveness_step(payload: LivenessStepRequest, biometric_service: OpenCVBiometricService = Depends(get_biometric_service)) -> dict[str, object]:
     try:
         actions, current_step = verify_liveness_challenge(payload.challenge_token)
@@ -83,7 +83,7 @@ def user_exists(username: str, repository: UserRepository = Depends(get_reposito
     return {"exists": True, "has_face": user.face_encoding is not None, "has_fingerprint": repository.has_fingerprint(user.id)}
 
 
-@router.post("/api/register/face")
+@router.post("/api/register/face", dependencies=[Depends(rate_limit("register_face"))])
 def register_face(payload: RegisterFaceRequest, use_case: RegisterFace = Depends(get_register_face), biometric_service: OpenCVBiometricService = Depends(get_biometric_service)) -> dict:
     try:
         username = payload.username.strip()
@@ -100,7 +100,7 @@ def register_face(payload: RegisterFaceRequest, use_case: RegisterFace = Depends
     return {"ok": True, "message": message, "username": username}
 
 
-@router.post("/api/register/fingerprint-sample")
+@router.post("/api/register/fingerprint-sample", dependencies=[Depends(rate_limit("register_fp"))])
 def register_fingerprint_sample(payload: RegisterFingerprintSampleRequest, use_case: RegisterFingerprint = Depends(get_register_fingerprint)) -> dict:
     try:
         sample = use_case.execute(payload.username, payload.sample_format, payload.data_base64, payload.quality)
