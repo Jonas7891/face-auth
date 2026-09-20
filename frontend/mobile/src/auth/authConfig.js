@@ -4,6 +4,7 @@
  * - EXPO_PUBLIC_API_URL: base del backend FastAPI (nunca Metro/8081).
  * - EXPO_PUBLIC_AUTH_MODE: "biometric" (defecto) | "legacy" (fallback controlado).
  * - EXPO_PUBLIC_SESSION_V2: "1" (defecto) | "0" para no enviar/usar refresh.
+ * - EXPO_PUBLIC_AUTH_DEBUG: "1" (defecto en dev) | "0" para silenciar logs [Auth].
  *
  * Nada aquí contiene secretos. Los tokens viven en tokenStorage.js.
  */
@@ -26,15 +27,16 @@ const API_URL = baseApiUrl();
 const AUTH_MODE = readEnv("EXPO_PUBLIC_AUTH_MODE", "biometric");
 const SESSION_V2 = readEnv("EXPO_PUBLIC_SESSION_V2", "1") !== "0";
 const IS_DEV = typeof __DEV__ !== "undefined" ? __DEV__ : process.env.NODE_ENV !== "production";
+const DEBUG = readEnv("EXPO_PUBLIC_AUTH_DEBUG", IS_DEV ? "1" : "0") === "1";
 
 if (IS_DEV && isMetroUrl(API_URL)) {
   // eslint-disable-next-line no-console
   console.warn("[Auth] EXPO_PUBLIC_API_URL apunta a :8081 (Metro). Debe ser el backend :8000.");
 }
 
-if (IS_DEV) {
+if (DEBUG) {
   // eslint-disable-next-line no-console
   console.log("[Auth] modo activo:", AUTH_MODE, "| session_v2:", SESSION_V2 ? "on" : "off");
 }
 
-module.exports = { API_URL, AUTH_MODE, SESSION_V2, isMetroUrl };
+module.exports = { API_URL, AUTH_MODE, SESSION_V2, DEBUG, IS_DEV, isMetroUrl };

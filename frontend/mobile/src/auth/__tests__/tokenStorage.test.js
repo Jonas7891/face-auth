@@ -25,3 +25,12 @@ describe("tokenStorage", () => {
     assert.equal(storage.fingerprint(null), "none");
   });
 });
+
+describe("authConfig", () => {
+  it("DEBUG activo en test y detecta Metro :8081", () => {
+    const config = require("../authConfig");
+    assert.equal(config.DEBUG, true);
+    assert.equal(config.isMetroUrl("http://192.168.1.1:8081"), true);
+    assert.equal(config.isMetroUrl("http://192.168.1.1:8000"), false);
+  });
+});

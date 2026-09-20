@@ -20,7 +20,7 @@ const config = require("./authConfig");
 const storage = require("./tokenStorage");
 
 function safeLog(...args) {
-  if (config.SESSION_V2 !== false) {
+  if (config.DEBUG) {
     // eslint-disable-next-line no-console
     console.log("[Auth]", ...args);
   }
