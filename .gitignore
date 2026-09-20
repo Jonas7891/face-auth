@@ -1,0 +1,28 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.egg-info/
+
+# Node
+node_modules/
+npm-debug.log*
+frontend/dist/
+frontend/.expo/
+frontend/mobile/dist/
+frontend/mobile/.expo/
+frontend/public/vendor/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

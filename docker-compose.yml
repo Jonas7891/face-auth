@@ -1,0 +1,69 @@
+name: face-auth
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-face_auth}
+      POSTGRES_USER: ${POSTGRES_USER:-faceauth}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-faceauth}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-faceauth} -d ${POSTGRES_DB:-face_auth}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-biometric}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-biometric}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-biometric}
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --username ${MONGO_ROOT_USERNAME:-biometric} --password ${MONGO_ROOT_PASSWORD:-biometric} --authenticationDatabase admin --eval \"db.adminCommand('ping').ok\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      MONGO_URL: mongodb://${MONGO_ROOT_USERNAME:-biometric}:${MONGO_ROOT_PASSWORD:-biometric}@mongo:27017/?authSource=admin
+      MONGO_DB: ${MONGO_DB:-biometric}
+      POSTGRES_URL: postgresql://${POSTGRES_USER:-faceauth}:${POSTGRES_PASSWORD:-faceauth}@postgres:5432/${POSTGRES_DB:-face_auth}
+      MATCH_THRESHOLD: ${MATCH_THRESHOLD:-0.6}
+      FINGERPRINT_MATCH_THRESHOLD: ${FINGERPRINT_MATCH_THRESHOLD:-8}
+      JWT_SECRET: ${JWT_SECRET:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2)\"" ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+
+volumes:
+  mongo_data:
+  postgres_data:

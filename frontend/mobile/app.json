@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Face Auth",
+    "slug": "face-auth-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permite que Face Auth use la camara para verificar tu rostro."
+        }
+      ],
+      "expo-status-bar"
+    ],
+    "android": {
+      "package": "com.faceauth.mobile"
+    },
+    "ios": {
+      "bundleIdentifier": "com.faceauth.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Face Auth usa la camara para registrar y verificar rostros."
+      }
+    }
+  }
+}
