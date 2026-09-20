@@ -43,15 +43,16 @@ export default function App() {
     const [cameraReady, setCameraReady] = useState(false);
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState("Pulsa el boton para permitir el acceso a la camara.");
-    const [error, setError] = useState(false);
+    const [tone, setTone] = useState("info");
     const [health, setHealth] = useState("Comprobando API...");
     const [livenessAction, setLivenessAction] = useState("");
+    const [livenessProgress, setLivenessProgress] = useState(null);
     const [users, setUsers] = useState([]);
     const [activeUsers, setActiveUsers] = useState([]);
     const [readerState, setReaderState] = useState("Comprobando lector...");
     const fingerprintRef = useRef({ api: null, channel: null, device: null, capturing: false, sample: null, quality: null });
 
-    const setStatus = (text, isError = false) => { setMessage(text); setError(isError); };
+    const setStatus = (text, toneOrError = "info") => { setMessage(text); setTone(toneOrError === true ? "error" : toneOrError); };
 
     const loadUsers = async () => {
         try {
@@ -112,17 +113,20 @@ export default function App() {
             const action = challenge.actions[actionIndex];
             let complete = false;
             for (let attempt = 0; attempt < 2 && !complete; attempt += 1) {
-                setLivenessAction(`${ACTION_LABELS[action] || "Sigue la instruccion"}${attempt ? " (repite)" : ""}`);
+                setLivenessAction(`${ACTION_LABELS[action] || "Sigue la instruccion"}${attempt ? " (repite el gesto)" : ""}`);
+                setLivenessProgress({ done: actionIndex, total: challenge.actions.length });
                 await wait(350);
                 const actionFrames = [];
                 for (let frame = 0; frame < 6; frame += 1) { actionFrames.push(captureFrame()); if (frame < 5) await wait(280); }
                 try {
                     const result = await post("/api/face/liveness-step", { challenge_token: token, action_index: actionIndex, images: actionFrames });
                     frames.push(...actionFrames); token = result.challenge_token; complete = true;
+                    setLivenessProgress({ done: actionIndex + 1, total: challenge.actions.length });
                 } catch (requestError) { if (attempt === 1) throw requestError; setStatus(`${requestError.message}. Repite el mismo gesto.`, true); }
             }
         }
         setLivenessAction("");
+        setLivenessProgress(null);
         return { challengeToken: token, image: frames[Math.floor(frames.length / 2)] };
     };
 
@@ -130,20 +134,20 @@ export default function App() {
         if (busy) return;
         setBusy(true);
         try { await operation(); } catch (runError) { setStatus(runError.message, true); }
-        finally { setBusy(false); setLivenessAction(""); }
+        finally { setBusy(false); setLivenessAction(""); setLivenessProgress(null); }
     };
 
     const registerFace = () => run(async () => {
         const name = username.trim(); if (!name) throw new Error("Escribe un usuario.");
-        setStatus("Preparando prueba de vida..."); const liveness = await captureLiveness(3); setStatus("Registrando rostro...");
+        setStatus("Te pediremos 3 gestos para registrar tu rostro.", "info"); const liveness = await captureLiveness(3); setStatus("Registrando rostro...");
         const data = await post("/api/register/face", { username: name, image: liveness.image, challenge_token: liveness.challengeToken });
-        setStatus(data.message || "Rostro registrado"); await loadUsers();
+        setStatus(data.message || "Rostro registrado", "ok"); await loadUsers();
     });
 
     const loginFace = () => run(async () => {
-        setStatus("Preparando prueba de vida..."); const liveness = await captureLiveness(2); setStatus("Verificando rostro...");
+        setStatus("Te pediremos 2 gestos para entrar.", "info"); const liveness = await captureLiveness(2); setStatus("Verificando rostro...");
         const data = await post("/api/login/face", { image: liveness.image, challenge_token: liveness.challengeToken });
-        setStatus(`Login OK: ${data.username} (distancia: ${Number(data.distance).toFixed(3)})`);
+        setStatus(`Login OK: ${data.username} (distancia: ${Number(data.distance).toFixed(3)})`, "ok");
         await loadUsers();
     });
 
@@ -186,13 +190,13 @@ export default function App() {
         const name = username.trim(); const sample = fingerprintRef.current.sample;
         if (!name) throw new Error("Escribe un usuario para asociar la huella."); if (!sample) throw new Error("Captura una huella primero.");
         const data = await post("/api/register/fingerprint-sample", { username: name, sample_format: sample.format, data_base64: sample.data, quality: sample.quality });
-        setStatus(data.message); setReaderState("Muestra guardada."); await loadUsers();
+        setStatus(data.message, "ok"); setReaderState("Muestra guardada."); await loadUsers();
     });
 
     const loginFingerprint = () => run(async () => {
         const sample = fingerprintRef.current.sample; if (!sample) throw new Error("Captura una huella primero.");
         const data = await post("/api/login/fingerprint-sample", { sample_format: sample.format, data_base64: sample.data, quality: sample.quality });
-        setStatus(`Login OK: ${data.username}`); await loadUsers();
+        setStatus(`Login OK: ${data.username}`, "ok"); await loadUsers();
     });
 
     const header = h("header", null,
@@ -207,20 +211,25 @@ export default function App() {
         h("span", { className: "label" }, "ROSTRO"),
         h("div", { className: "viewfinder" },
             h("video", { ref: videoRef, autoPlay: true, playsInline: true, muted: true }),
+            h("span", { className: "face-oval" }),
             h("span", { className: "corner top-left" }), h("span", { className: "corner top-right" }),
             h("span", { className: "corner bottom-left" }), h("span", { className: "corner bottom-right" }),
-            h("span", { className: "frame-tag" }, livenessAction || "FACE 01"),
+            h("span", { className: "frame-tag" }, livenessProgress ? `Gesto ${Math.min(livenessProgress.done + 1, livenessProgress.total)} de ${livenessProgress.total}` : "FACE 01"),
             !cameraReady && h("div", { className: "camera-permission" },
                 h("strong", null, "Acceso a la camara"),
                 h("span", null, "El navegador te preguntara si permites usarla."),
                 h(Button, { variant: "cyan", disabled: busy, onClick: startCamera }, "Dar acceso a la camara")
             )
         ),
-        h("div", { className: "actions" }, h(Button, { variant: "amber", disabled: !cameraReady || busy, onClick: registerFace }, "Registrar rostro"), h(Button, { variant: "cyan", disabled: !cameraReady || busy, onClick: loginFace }, "Login rostro")),
+        livenessProgress && h("div", { className: "progress" },
+            h("div", { className: "dots" }, livenessProgress && Array.from({ length: livenessProgress.total }, (_, index) => h("span", { key: index, className: `dot${index < livenessProgress.done ? " dot-done" : ""}` }))),
+            h("div", { className: "progress-bar" }, h("span", { style: { width: `${(livenessProgress.done / livenessProgress.total) * 100}%` } }))
+        ),
+        h("div", { className: "actions" }, h(Button, { variant: "amber", disabled: !cameraReady || busy, onClick: registerFace }, busy ? "Trabajando..." : "Registrar rostro (3 gestos)"), h(Button, { variant: "cyan", disabled: !cameraReady || busy, onClick: loginFace }, busy ? "Trabajando..." : "Login rostro (2 gestos)")),
         livenessAction && h("p", { className: "instruction" }, livenessAction)
     );
     const fingerprintPanel = h("section", { className: "section" }, h("span", { className: "label" }, "HUELLA / DIGITALPERSONA 4500"), h("p", { className: "reader-state" }, readerState), h("div", { className: "actions" }, h(Button, { onClick: refreshReader }, "Detectar lector"), h(Button, { variant: "amber", disabled: busy, onClick: startFingerprint }, "Iniciar captura")), h("div", { className: "actions" }, h(Button, { variant: "amber", disabled: busy, onClick: saveFingerprint }, "Guardar muestra"), h(Button, { variant: "cyan", disabled: busy, onClick: loginFingerprint }, "Iniciar sesion")));
-    const status = h("section", { className: "section" }, h("span", { className: "label" }, "ESTADO"), h("p", { className: `status ${error ? "status-error" : "status-ok"}` }, message));
+    const status = h("section", { className: "section" }, h("span", { className: "label" }, "ESTADO"), h("p", { className: `status status-${tone}` }, `${tone === "ok" ? "✓ " : tone === "error" ? "✕ " : ""}${message}`));
     const sideHeader = h("div", { className: "method-bar" }, h("div", null, h("span", { className: "label" }, "VISTA ACTIVA"), h("b", null, sideView === "active" ? "LOGEADOS" : "DIRECTORIO")), h(Button, { onClick: () => setSideView(sideView === "active" ? "directory" : "active") }, `Ver ${sideView === "active" ? "directorio" : "logeados"}`));
     const instruction = h("div", { className: "side-instruction", role: "status", "aria-live": "polite" }, h("span", { className: "label" }, "INSTRUCCION ACTUAL"), h("strong", null, livenessAction || message));
     const sidePanel = h("aside", { className: "side-card" }, sideHeader, sideView === "active" ? h(UserList, { active: true, title: "Personas logeadas", users: activeUsers }) : h(UserList, { title: "Personas registradas", users }), h(Button, { onClick: loadUsers }, "Actualizar listas"), instruction);
