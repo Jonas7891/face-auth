@@ -1,0 +1,29 @@
+{
+  "name": "face-auth-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "test": "node --test \"src/auth/__tests__/authClient.test.js\" \"src/auth/__tests__/tokenStorage.test.js\"",
+    "start:tunnel": "set EXPO_PUBLIC_API_URL=http://172.28.192.1:8000&& expo start --tunnel",
+    "start:lan": "set EXPO_PUBLIC_API_URL=http://172.28.192.1:8000&& expo start --lan",
+    "android": "expo start --android",
+    "ios": "expo start --ios"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~57.0.15",
+    "babel-preset-expo": "~57.0.0",
+    "expo": "^57.0.0",
+    "expo-camera": "~57.0.5",
+    "expo-constants": "~57.0.18",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-web": "^0.21.2"
+  },
+  "devDependencies": {
+    "@expo/ngrok": "^4.1.0"
+  }
+}
