@@ -23,6 +23,7 @@ from ...config.dependencies import (
     rate_limit,
 )
 from ....domain.exceptions import DuplicateUserError
+from ....domain.value_objects import AuditAction
 from ...config.settings import settings
 from ...observability.middleware import inc
 from ..auth import active_session_usernames, advance_liveness_challenge, consume_liveness_challenge, create_access_token, create_liveness_challenge, verify_liveness_challenge
@@ -38,6 +39,25 @@ from ..schemas.auth_schema import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _audit(audit, action: AuditAction, subject: str | None, detail: str = "") -> None:
+    """Escritura best-effort: la auditoría jamás bloquea el camino feliz."""
+    try:
+        audit.record(action.value, subject, detail)
+    except Exception:
+        logger.debug("audit write failed action=%s", action.value)
+
+
+def _auth_failure(audit, modality: str) -> None:
+    inc("biometric_match_failure_total")
+    _audit(audit, AuditAction.VERIFY_FAILURE, None, modality)
+
+
+def _auth_success(audit, username: str, modality: str) -> None:
+    inc("biometric_verification_total")
+    inc("biometric_match_success_total")
+    _audit(audit, AuditAction.VERIFY_SUCCESS, username, modality)
 
 
 @router.get("/api/health")
@@ -122,19 +142,10 @@ def login_fingerprint_sample(payload: LoginFingerprintSampleRequest, use_case: L
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except PermissionError as exc:
         logger.warning("Fingerprint authentication failed")
-        inc("biometric_match_failure_total")
-        try:
-            audit.record("verify_failure", None, "fingerprint")
-        except Exception:
-            pass
+        _auth_failure(audit, "fingerprint")
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     logger.info("Fingerprint authentication succeeded username=%s", username)
-    inc("biometric_verification_total")
-    inc("biometric_match_success_total")
-    try:
-        audit.record("verify_success", username, "fingerprint")
-    except Exception:
-        pass
+    _auth_success(audit, username, "fingerprint")
     access_token, expires_in = create_access_token(username)
     response = {"ok": True, "username": username, "score": score, "access_token": access_token, "token_type": "bearer", "expires_in": expires_in, "message": f"Huella reconocida: {username}."}
     if settings.session_v2_enabled:
@@ -154,19 +165,10 @@ def login_face(payload: LoginFaceRequest, use_case: LoginFace = Depends(get_logi
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except PermissionError as exc:
         logger.warning("Face authentication failed")
-        inc("biometric_match_failure_total")
-        try:
-            audit.record("verify_failure", None, "face")
-        except Exception:
-            pass
+        _auth_failure(audit, "face")
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     logger.info("Face authentication succeeded username=%s distance=%.4f", username, distance)
-    inc("biometric_verification_total")
-    inc("biometric_match_success_total")
-    try:
-        audit.record("verify_success", username, "face")
-    except Exception:
-        pass
+    _auth_success(audit, username, "face")
     access_token, expires_in = create_access_token(username)
     response = {"ok": True, "username": username, "distance": distance, "access_token": access_token, "token_type": "bearer", "expires_in": expires_in}
     if settings.session_v2_enabled:
@@ -182,15 +184,9 @@ def refresh_session(payload: RefreshRequest, audit=Depends(get_audit_sink)) -> d
     try:
         session = get_session_service().refresh(payload.refresh_token)
     except ValueError as exc:
-        try:
-            audit.record("token_refresh_failure", None, "refresh")
-        except Exception:
-            pass
+        _audit(audit, AuditAction.TOKEN_REFRESH_FAILURE, None, "refresh")
         raise HTTPException(status_code=401, detail=str(exc)) from exc
-    try:
-        audit.record("token_refresh", None, "refresh")
-    except Exception:
-        pass
+    _audit(audit, AuditAction.TOKEN_REFRESH, None, "refresh")
     return {"ok": True, "access_token": session["access_token"], "refresh_token": session["refresh_token"], "session_id": session["session_id"], "token_type": "bearer", "expires_in": session["expires_in"]}
 
 
@@ -198,10 +194,7 @@ def refresh_session(payload: RefreshRequest, audit=Depends(get_audit_sink)) -> d
 def logout(payload: LogoutRequest, audit=Depends(get_audit_sink)) -> dict:
     """Revoca la familia de refresh server-side. Idempotente (siempre 200)."""
     get_session_service().logout(payload.refresh_token, payload.session_id)
-    try:
-        audit.record("logout", None, "logout")
-    except Exception:
-        pass
+    _audit(audit, AuditAction.LOGOUT, None, "logout")
     return {"ok": True}
 
 
