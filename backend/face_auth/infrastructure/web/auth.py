@@ -68,13 +68,20 @@ def register_active_session(username: str, expires_at_timestamp: float) -> None:
     _active_sessions[username] = expires_at_timestamp
 
 
-def create_liveness_challenge() -> tuple[str, list[str]]:
+def create_liveness_challenge(num_actions: int = 3) -> tuple[str, list[str]]:
+    """Crea un reto con `num_actions` gestos aleatorios (2 = login rápido, 3 = registro).
+
+    El subconjunto y el orden son aleatorios en cada reto: un vídeo con una
+    secuencia fija no sirve aunque conozca los gestos posibles.
+    """
     global _last_liveness_actions
-    actions = list(LIVENESS_ACTIONS)
+    if num_actions not in (2, 3):
+        raise ValueError("El número de gestos debe ser 2 o 3")
     randomizer = secrets.SystemRandom()
+    actions = randomizer.sample(list(LIVENESS_ACTIONS), num_actions)
     randomizer.shuffle(actions)
-    while tuple(actions) == _last_liveness_actions:
-        randomizer.shuffle(actions)
+    if tuple(actions) == _last_liveness_actions:
+        randomizer.shuffle(actions)  # evita repetir la secuencia idéntica anterior
     _last_liveness_actions = tuple(actions)
     return _create_liveness_token(actions, 0), actions
 
@@ -90,12 +97,21 @@ def verify_liveness_challenge(token: str, require_complete: bool = False) -> tup
         payload = json.loads(_decode_base64url(encoded_text).decode())
         actions = payload["actions"]
         step = payload["step"]
-        if payload["exp"] < time.time() or sorted(actions) != sorted(LIVENESS_ACTIONS) or step not in range(len(LIVENESS_ACTIONS) + 1):
+        valid = (
+            isinstance(actions, list)
+            and len(actions) in (2, 3)
+            and len(set(actions)) == len(actions)
+            and set(actions) <= set(LIVENESS_ACTIONS)
+        )
+        if payload["exp"] < time.time() or not valid or step not in range(len(actions) + 1):
             raise ValueError("El reto de prueba de vida expiró o es inválido")
-        if require_complete and step != len(LIVENESS_ACTIONS):
+        if require_complete and step != len(actions):
             raise ValueError("La prueba de vida no se ha completado")
         return actions, step
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+    except (KeyError, TypeError, json.JSONDecodeError) as exc:
+        # Nota: ValueError intencional (expirado/incompleto) se propaga con su
+        # mensaje; solo los errores de formato caen al mensaje genérico.
+        # (JSONDecodeError hereda de ValueError: se captura explícito arriba.)
         raise ValueError("Reto de prueba de vida inválido") from exc
 
 

@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ....application.use_cases.login_face import LoginFace
 from ....application.use_cases.login_fingerprint import LoginFingerprint
@@ -73,9 +73,13 @@ def readiness() -> dict[str, str]:
 
 
 @router.get("/api/face/liveness-challenge")
-def liveness_challenge() -> dict[str, object]:
-    token, actions = create_liveness_challenge()
-    return {"challenge_token": token, "actions": actions}
+def liveness_challenge(actions: int = Query(default=3, ge=2, le=3)) -> dict[str, object]:
+    """`actions=3` (defecto, registro) o `actions=2` (login rápido)."""
+    try:
+        token, actions_list = create_liveness_challenge(actions)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"challenge_token": token, "actions": actions_list}
 
 
 @router.post("/api/face/liveness-step", dependencies=[Depends(rate_limit("liveness_step"))])

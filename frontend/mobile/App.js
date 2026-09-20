@@ -103,8 +103,8 @@ export default function App() {
     return `data:image/jpeg;base64,${picture.base64}`;
   };
 
-  const captureLiveness = async () => {
-    const challenge = await api("/api/face/liveness-challenge");
+  const captureLiveness = async (gestureCount = 3) => {
+    const challenge = await api(`/api/face/liveness-challenge?actions=${gestureCount}`);
     let token = challenge.challenge_token;
     const frames = [];
 
@@ -148,7 +148,7 @@ export default function App() {
     setBusy(true);
     try {
       setMessage("Preparando prueba de vida...");
-      const liveness = await captureLiveness();
+      const liveness = await captureLiveness(action === "register" ? 3 : 2);
       setMessage(action === "register" ? "Registrando rostro..." : "Verificando rostro...");
       const path = action === "register" ? "/api/register/face" : "/api/login/face";
       const payload = action === "register"

@@ -104,8 +104,8 @@ export default function App() {
         return canvas.toDataURL("image/jpeg", 0.82);
     };
 
-    const captureLiveness = async () => {
-        const challenge = await get("/api/face/liveness-challenge");
+    const captureLiveness = async (gestureCount = 3) => {
+        const challenge = await get(`/api/face/liveness-challenge?actions=${gestureCount}`);
         let token = challenge.challenge_token;
         const frames = [];
         for (let actionIndex = 0; actionIndex < challenge.actions.length; actionIndex += 1) {
@@ -135,13 +135,13 @@ export default function App() {
 
     const registerFace = () => run(async () => {
         const name = username.trim(); if (!name) throw new Error("Escribe un usuario.");
-        setStatus("Preparando prueba de vida..."); const liveness = await captureLiveness(); setStatus("Registrando rostro...");
+        setStatus("Preparando prueba de vida..."); const liveness = await captureLiveness(3); setStatus("Registrando rostro...");
         const data = await post("/api/register/face", { username: name, image: liveness.image, challenge_token: liveness.challengeToken });
         setStatus(data.message || "Rostro registrado"); await loadUsers();
     });
 
     const loginFace = () => run(async () => {
-        setStatus("Preparando prueba de vida..."); const liveness = await captureLiveness(); setStatus("Verificando rostro...");
+        setStatus("Preparando prueba de vida..."); const liveness = await captureLiveness(2); setStatus("Verificando rostro...");
         const data = await post("/api/login/face", { image: liveness.image, challenge_token: liveness.challengeToken });
         setStatus(`Login OK: ${data.username} (distancia: ${Number(data.distance).toFixed(3)})`);
         await loadUsers();
