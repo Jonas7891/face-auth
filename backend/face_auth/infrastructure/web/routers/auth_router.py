@@ -6,10 +6,8 @@ from ....application.use_cases.login_face import LoginFace
 from ....application.use_cases.login_fingerprint import LoginFingerprint
 from ....application.use_cases.register_face import RegisterFace
 from ....application.use_cases.register_fingerprint import RegisterFingerprint
+from ....domain.ports.out.biometric_service import BiometricService
 from ....domain.ports.out.user_repository import UserRepository
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from ...biometrics.opencv_biometric_service import OpenCVBiometricService
 from ...config.dependencies import (
     database_is_ready,
     get_audit_sink,
@@ -83,7 +81,7 @@ def liveness_challenge(actions: int = Query(default=3, ge=2, le=3)) -> dict[str,
 
 
 @router.post("/api/face/liveness-step", dependencies=[Depends(rate_limit("liveness_step"))])
-def liveness_step(payload: LivenessStepRequest, biometric_service: OpenCVBiometricService = Depends(get_biometric_service)) -> dict[str, object]:
+def liveness_step(payload: LivenessStepRequest, biometric_service: BiometricService = Depends(get_biometric_service)) -> dict[str, object]:
     try:
         actions, current_step = verify_liveness_challenge(payload.challenge_token)
         if current_step != payload.action_index:
@@ -108,7 +106,7 @@ def user_exists(username: str, repository: UserRepository = Depends(get_reposito
 
 
 @router.post("/api/register/face", dependencies=[Depends(rate_limit("register_face"))])
-def register_face(payload: RegisterFaceRequest, use_case: RegisterFace = Depends(get_register_face), biometric_service: OpenCVBiometricService = Depends(get_biometric_service)) -> dict:
+def register_face(payload: RegisterFaceRequest, use_case: RegisterFace = Depends(get_register_face), biometric_service: BiometricService = Depends(get_biometric_service)) -> dict:
     try:
         username = payload.username.strip()
         existed = use_case.repository.get_by_username(username) is not None
@@ -137,7 +135,7 @@ def register_fingerprint_sample(payload: RegisterFingerprintSampleRequest, use_c
 
 
 @router.post("/api/login/fingerprint-sample", dependencies=[Depends(rate_limit("login_fp"))])
-def login_fingerprint_sample(payload: LoginFingerprintSampleRequest, use_case: LoginFingerprint = Depends(get_login_fingerprint), biometric_service: OpenCVBiometricService = Depends(get_biometric_service), audit=Depends(get_audit_sink)) -> dict:
+def login_fingerprint_sample(payload: LoginFingerprintSampleRequest, use_case: LoginFingerprint = Depends(get_login_fingerprint), biometric_service: BiometricService = Depends(get_biometric_service), audit=Depends(get_audit_sink)) -> dict:
     if not payload.data_base64:
         raise HTTPException(status_code=400, detail="La muestra de huella es requerida")
     try:
@@ -160,7 +158,7 @@ def login_fingerprint_sample(payload: LoginFingerprintSampleRequest, use_case: L
 
 
 @router.post("/api/login/face", dependencies=[Depends(rate_limit("login_face"))])
-def login_face(payload: LoginFaceRequest, use_case: LoginFace = Depends(get_login_face), biometric_service: OpenCVBiometricService = Depends(get_biometric_service), audit=Depends(get_audit_sink)) -> dict:
+def login_face(payload: LoginFaceRequest, use_case: LoginFace = Depends(get_login_face), biometric_service: BiometricService = Depends(get_biometric_service), audit=Depends(get_audit_sink)) -> dict:
     try:
         verify_liveness_challenge(payload.challenge_token, require_complete=True)
         username, distance = use_case.execute(biometric_service.decode_image(payload.image), liveness_verified=True)

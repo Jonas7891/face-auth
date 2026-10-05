@@ -19,6 +19,14 @@ docker compose up -d --build
 
 El frontend usa React, Vite y los SDK web de DigitalPersona. El proxy nginx envia `/api/` al backend, por lo que no hace falta configurar una URL distinta en el navegador.
 
+### Lector DigitalPersona 4500
+
+El lector se comunica directamente con el navegador del equipo cliente mediante el SDK web de DigitalPersona. En cada equipo que tenga conectado el lector instala el driver y el runtime/servicio oficial de DigitalPersona compatible con el 4500; el driver por sí solo no expone el lector a una página web. Este runtime debe estar ejecutándose en el mismo equipo donde está conectado el lector, no dentro de Docker ni únicamente en el servidor.
+
+Abre la web en ese equipo. La app intenta conectar con el runtime al iniciar y vuelve a comprobar el lector automáticamente cada tres segundos, incluso si el lector se conecta después de abrir la página. Si no conecta, confirma que el runtime está instalado y activo, y pulsa **Detectar lector** para reintentar. Al usar otro equipo, instala allí también el driver y el runtime y conecta allí el lector; la web no puede acceder por red a un USB conectado a otro equipo.
+
+Para usar la cámara desde otros equipos o teléfonos, publica además la web mediante HTTPS; los navegadores restringen el acceso a cámara en páginas servidas por HTTP desde la red.
+
 ## App móvil con Expo Go
 
 La app móvil está en `frontend/mobile` y permite probar la cámara, el registro facial y el login facial desde un teléfono. Expo Go no puede acceder al lector USB DigitalPersona; ese flujo continúa disponible en la app web.

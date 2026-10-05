@@ -50,7 +50,9 @@ export default function App() {
     const [users, setUsers] = useState([]);
     const [activeUsers, setActiveUsers] = useState([]);
     const [readerState, setReaderState] = useState("Comprobando lector...");
-    const fingerprintRef = useRef({ api: null, channel: null, device: null, capturing: false, sample: null, quality: null });
+    const [readerChecking, setReaderChecking] = useState(false);
+    const [readerError, setReaderError] = useState(false);
+    const fingerprintRef = useRef({ api: null, channel: null, device: null, capturing: false, sample: null, quality: null, checking: false, pollTimer: null });
 
     const setStatus = (text, toneOrError = "info") => { setMessage(text); setTone(toneOrError === true ? "error" : toneOrError); };
 
@@ -71,7 +73,11 @@ export default function App() {
         };
         start();
         refreshReader();
-        return () => { active = false; streamRef.current?.getTracks().forEach((track) => track.stop()); };
+        return () => {
+            active = false;
+            clearInterval(fingerprintRef.current.pollTimer);
+            streamRef.current?.getTracks().forEach((track) => track.stop());
+        };
     }, []);
 
     const startCamera = async () => {
@@ -163,16 +169,55 @@ export default function App() {
         try { const chunks = JSON.parse(encoded.replace(/]\s*\[/g, ",")); return chunks.join(""); } catch (_) { return encoded; }
     };
 
-    const refreshReader = async () => {
-        const webSdk = window.WebSdk; const fingerprintSdk = window.Fingerprint;
-        if (!webSdk || !fingerprintSdk) { setReaderState("SDK DigitalPersona no cargado"); return; }
+    const refreshReader = async (silent = false) => {
+        const state = fingerprintRef.current;
+        if (state.checking) return;
+        state.checking = true;
+        if (!silent) {
+            setReaderChecking(true);
+            setReaderError(false);
+            setReaderState("Conectando con el runtime DigitalPersona de este equipo...");
+        }
         try {
-            const channel = new webSdk.WebChannelClient(new webSdk.WebChannelOptions({}));
-            const fingerprintApi = new fingerprintSdk.WebApi(channel);
-            await channel.connect(); const devices = await fingerprintApi.enumerateDevices();
-            fingerprintRef.current = { ...fingerprintRef.current, api: fingerprintApi, channel, device: devices?.[0] || null };
-            setReaderState(devices?.length ? "Lector conectado" : "Sin lector conectado");
-        } catch (readerError) { setReaderState(`Servicio DigitalPersona no disponible: ${readerError.message}`); }
+            let { api: fingerprintApi, channel } = state;
+            if (!fingerprintApi) {
+                const webSdk = window.WebSdk;
+                const fingerprintSdk = window.Fingerprint;
+                if (!webSdk || !fingerprintSdk) throw new Error("No se cargaron los SDK web de DigitalPersona.");
+                channel = new webSdk.WebChannelClient(new webSdk.WebChannelOptions({}));
+                fingerprintApi = new fingerprintSdk.WebApi(channel);
+                await channel.connect();
+                fingerprintRef.current = { ...fingerprintRef.current, api: fingerprintApi, channel };
+            }
+            const devices = await fingerprintApi.enumerateDevices();
+            const device = devices?.[0] || null;
+            const previousDevice = fingerprintRef.current.device;
+            const key = (value) => value && (typeof value === "string" ? value : value.deviceId || value.id || value.name || String(value));
+            const changed = key(previousDevice) !== key(device);
+            fingerprintRef.current = {
+                ...fingerprintRef.current,
+                api: fingerprintApi,
+                channel,
+                device,
+                sample: changed ? null : fingerprintRef.current.sample,
+            };
+            setReaderError(false);
+            if (!silent || changed) {
+                setReaderState(device
+                    ? "Lector DigitalPersona conectado."
+                    : "Runtime conectado; esperando un lector DigitalPersona.");
+            }
+        } catch (error) {
+            fingerprintRef.current = { ...fingerprintRef.current, api: null, channel: null, device: null, sample: null };
+            setReaderError(true);
+            setReaderState(`No se pudo conectar con el runtime DigitalPersona: ${error.message}`);
+        } finally {
+            fingerprintRef.current.checking = false;
+            if (!fingerprintRef.current.pollTimer) {
+                fingerprintRef.current.pollTimer = setInterval(() => { void refreshReader(true); }, 3000);
+            }
+            if (!silent) setReaderChecking(false);
+        }
     };
 
     const startFingerprint = async () => {
@@ -228,7 +273,19 @@ export default function App() {
         h("div", { className: "actions" }, h(Button, { variant: "amber", disabled: !cameraReady || busy, onClick: registerFace }, busy ? "Trabajando..." : "Registrar rostro (3 gestos)"), h(Button, { variant: "cyan", disabled: !cameraReady || busy, onClick: loginFace }, busy ? "Trabajando..." : "Login rostro (2 gestos)")),
         livenessAction && h("p", { className: "instruction" }, livenessAction)
     );
-    const fingerprintPanel = h("section", { className: "section" }, h("span", { className: "label" }, "HUELLA / DIGITALPERSONA 4500"), h("p", { className: "reader-state" }, readerState), h("div", { className: "actions" }, h(Button, { onClick: refreshReader }, "Detectar lector"), h(Button, { variant: "amber", disabled: busy, onClick: startFingerprint }, "Iniciar captura")), h("div", { className: "actions" }, h(Button, { variant: "amber", disabled: busy, onClick: saveFingerprint }, "Guardar muestra"), h(Button, { variant: "cyan", disabled: busy, onClick: loginFingerprint }, "Iniciar sesion")));
+    const fingerprintPanel = h("section", { className: "section" },
+        h("span", { className: "label" }, "HUELLA / DIGITALPERSONA 4500"),
+        h("p", { className: "reader-state", role: "status", "aria-live": "polite" }, readerState),
+        readerError && h("p", { className: "reader-help" }, "Instala e inicia el runtime oficial de DigitalPersona en este mismo equipo, además del driver. La web no puede acceder al lector usando solo el driver. Si abres la web desde otro equipo, instala allí también el runtime y conecta allí el lector."),
+        h("div", { className: "actions" },
+            h(Button, { onClick: refreshReader, disabled: readerChecking }, readerChecking ? "Buscando..." : "Detectar lector"),
+            h(Button, { variant: "amber", disabled: busy || !fingerprintRef.current.device, onClick: startFingerprint }, "Iniciar captura")
+        ),
+        h("div", { className: "actions" },
+            h(Button, { variant: "amber", disabled: busy, onClick: saveFingerprint }, "Guardar muestra"),
+            h(Button, { variant: "cyan", disabled: busy, onClick: loginFingerprint }, "Iniciar sesion")
+        )
+    );
     const status = h("section", { className: "section" }, h("span", { className: "label" }, "ESTADO"), h("p", { className: `status status-${tone}` }, `${tone === "ok" ? "✓ " : tone === "error" ? "✕ " : ""}${message}`));
     const sideHeader = h("div", { className: "method-bar" }, h("div", null, h("span", { className: "label" }, "VISTA ACTIVA"), h("b", null, sideView === "active" ? "LOGEADOS" : "DIRECTORIO")), h(Button, { onClick: () => setSideView(sideView === "active" ? "directory" : "active") }, `Ver ${sideView === "active" ? "directorio" : "logeados"}`));
     const instruction = h("div", { className: "side-instruction", role: "status", "aria-live": "polite" }, h("span", { className: "label" }, "INSTRUCCION ACTUAL"), h("strong", null, livenessAction || message));
