@@ -53,7 +53,9 @@ export default function App() {
     const [readerState, setReaderState] = useState("Comprobando lector...");
     const [readerChecking, setReaderChecking] = useState(false);
     const [readerError, setReaderError] = useState(false);
-    const fingerprintRef = useRef({ api: null, channel: null, device: null, capturing: false, sample: null, quality: null, checking: false, pollTimer: null });
+    const [fingerprintCapturing, setFingerprintCapturing] = useState(false);
+    const [fingerprintSampleReady, setFingerprintSampleReady] = useState(false);
+    const fingerprintRef = useRef({ api: null, channel: null, device: null, capturing: false, stopping: false, sample: null, quality: null, checking: false, pollTimer: null });
 
     const setStatus = (text, toneOrError = "info") => { setMessage(text); setTone(toneOrError === true ? "error" : toneOrError); };
 
@@ -224,12 +226,70 @@ export default function App() {
     const startFingerprint = async () => {
         const state = fingerprintRef.current;
         if (!state.api || !state.device) { setReaderState("Detecta un lector DigitalPersona antes de capturar."); return; }
+        if (state.capturing) return;
+        state.sample = null;
+        state.stopping = false;
+        setFingerprintSampleReady(false);
         state.api.onQualityReported = (quality) => { state.quality = quality?.code ?? quality?.qualityCode ?? quality?.value ?? quality; };
-        state.api.onSamplesAcquired = (event) => { state.sample = { format: event.sampleFormat ?? null, data: normalizeSample(event.samples), quality: state.quality }; setReaderState("Huella capturada."); };
-        state.api.onAcquisitionStarted = () => { state.capturing = true; setReaderState("Coloca el dedo en el lector..."); };
-        state.api.onAcquisitionStopped = () => { state.capturing = false; };
-        try { await state.api.startAcquisition(window.Fingerprint.SampleFormat.PngImage, state.device); }
-        catch (_) { await state.api.startAcquisition(window.Fingerprint.SampleFormat.PngImage); }
+        state.api.onSamplesAcquired = async (event) => {
+            if (state.sample || state.stopping) return;
+            const sampleData = normalizeSample(event.samples);
+            if (!sampleData) {
+                setReaderState("El lector no devolvio una muestra valida. Intenta capturar de nuevo.");
+                return;
+            }
+            state.sample = { format: event.sampleFormat ?? null, data: sampleData, quality: state.quality };
+            setFingerprintSampleReady(true);
+            setReaderState("Huella capturada. Retira el dedo; ya puedes guardar o iniciar sesion.");
+            state.stopping = true;
+            try {
+                await state.api.stopAcquisition(event.deviceUid || state.device);
+                state.capturing = false;
+                setFingerprintCapturing(false);
+            } catch (error) {
+                setReaderState(`Huella capturada, pero no se pudo detener el lector: ${error.message}. Puedes guardar la muestra.`);
+            } finally {
+                state.stopping = false;
+            }
+        };
+        state.api.onAcquisitionStarted = () => {
+            state.capturing = true;
+            setFingerprintCapturing(true);
+            setReaderState("Coloca el dedo en el lector...");
+        };
+        state.api.onAcquisitionStopped = () => {
+            state.capturing = false;
+            setFingerprintCapturing(false);
+        };
+        state.capturing = true;
+        setFingerprintCapturing(true);
+        setReaderState("Iniciando captura. Coloca el dedo en el lector...");
+        try {
+            try {
+                await state.api.startAcquisition(window.Fingerprint.SampleFormat.PngImage, state.device);
+            } catch (_) {
+                await state.api.startAcquisition(window.Fingerprint.SampleFormat.PngImage);
+            }
+        } catch (error) {
+            state.capturing = false;
+            setFingerprintCapturing(false);
+            setReaderState(`No se pudo iniciar la captura: ${error.message}`);
+        }
+    };
+
+    const stopFingerprint = async () => {
+        const state = fingerprintRef.current;
+        if (!state.api || !state.capturing) return;
+        try {
+            await state.api.stopAcquisition(state.device);
+            state.capturing = false;
+            setFingerprintCapturing(false);
+            setReaderState(state.sample
+                ? "Lector detenido. La huella capturada esta lista para guardar."
+                : "Captura detenida. Puedes iniciar una nueva captura.");
+        } catch (error) {
+            setReaderState(`No se pudo detener el lector: ${error.message}`);
+        }
     };
 
     const saveFingerprint = () => run(async () => {
@@ -237,6 +297,7 @@ export default function App() {
         if (!name) throw new Error("Escribe un usuario para asociar la huella."); if (!sample) throw new Error("Captura una huella primero.");
         const data = await post("/api/register/fingerprint-sample", { username: name, sample_format: sample.format, data_base64: sample.data, quality: sample.quality });
         fingerprintRef.current.sample = null;
+        setFingerprintSampleReady(false);
         setStatus(data.message, "ok"); setReaderState("Muestra guardada en el servidor."); await loadUsers();
     });
 
@@ -244,6 +305,7 @@ export default function App() {
         const sample = fingerprintRef.current.sample; if (!sample) throw new Error("Captura una huella primero.");
         const data = await post("/api/login/fingerprint-sample", { sample_format: sample.format, data_base64: sample.data, quality: sample.quality });
         fingerprintRef.current.sample = null;
+        setFingerprintSampleReady(false);
         setStatus(`Login OK: ${data.username}`, "ok"); await loadUsers();
     });
 
@@ -282,11 +344,12 @@ export default function App() {
         readerError && h("p", { className: "reader-help" }, "Instala e inicia el runtime oficial de DigitalPersona en este mismo equipo, además del driver. La web no puede acceder al lector usando solo el driver. Si abres la web desde otro equipo, instala allí también el runtime y conecta allí el lector."),
         h("div", { className: "actions" },
             h(Button, { onClick: refreshReader, disabled: readerChecking }, readerChecking ? "Buscando..." : "Detectar lector"),
-            h(Button, { variant: "amber", disabled: busy || !fingerprintRef.current.device, onClick: startFingerprint }, "Iniciar captura")
+            h(Button, { variant: "amber", disabled: busy || fingerprintCapturing || !fingerprintRef.current.device, onClick: startFingerprint }, fingerprintSampleReady ? "Capturar otra vez" : "Iniciar captura"),
+            fingerprintCapturing && h(Button, { variant: "ghost", disabled: busy, onClick: stopFingerprint }, "Detener lector")
         ),
         h("div", { className: "actions" },
-            h(Button, { variant: "amber", disabled: busy, onClick: saveFingerprint }, "Guardar muestra"),
-            h(Button, { variant: "cyan", disabled: busy, onClick: loginFingerprint }, "Iniciar sesion")
+            h(Button, { variant: "amber", disabled: busy || !fingerprintSampleReady, onClick: saveFingerprint }, "Guardar muestra"),
+            h(Button, { variant: "cyan", disabled: busy || !fingerprintSampleReady, onClick: loginFingerprint }, "Iniciar sesion")
         )
     );
     const status = h("section", { className: "section" }, h("span", { className: "label" }, "ESTADO"), h("p", { className: `status status-${tone}` }, `${tone === "ok" ? "✓ " : tone === "error" ? "✕ " : ""}${message}`));
