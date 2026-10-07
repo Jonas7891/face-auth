@@ -13,6 +13,21 @@ def _payload(detail: str, code: str, status: int) -> JSONResponse:
     return JSONResponse(status_code=status, content={"detail": detail, "code": code})
 
 
+def _validation_response(exc: RequestValidationError) -> JSONResponse:
+    errors = [
+        {
+            "loc": error.get("loc", ()),
+            "msg": error.get("msg", "Valor inválido"),
+            "type": error.get("type", "value_error"),
+        }
+        for error in exc.errors()
+    ]
+    return JSONResponse(
+        status_code=422,
+        content={"detail": errors, "code": "validation_error"},
+    )
+
+
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(StarletteHTTPException)
     async def _http(request: Request, exc: StarletteHTTPException) -> JSONResponse:  # noqa: ARG001
@@ -22,7 +37,7 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def _validation(request: Request, exc: RequestValidationError) -> JSONResponse:  # noqa: ARG001
-        return _payload("Solicitud inválida", "validation_error", 422)
+        return _validation_response(exc)
 
     @app.exception_handler(ValueError)
     async def _value(request: Request, exc: ValueError) -> JSONResponse:  # noqa: ARG001

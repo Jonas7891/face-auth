@@ -9,8 +9,10 @@ async function api(path, options = {}) {
     const response = await fetch(url, { ...options, headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-        const detail = Array.isArray(data.detail) ? data.detail.map((item) => `${item.loc?.join(".") || "campo"}: ${item.msg}`).join("; ") : data.detail;
-        throw new Error(detail || `Error ${response.status}`);
+        const detail = Array.isArray(data.detail)
+            ? data.detail.map((item) => `${item.loc?.join(".") || "campo"}: ${item.msg}`).join("; ")
+            : data.detail;
+        throw new Error(`${detail || "Error de solicitud"} (HTTP ${response.status})`);
     }
     return data;
 }
@@ -18,6 +20,12 @@ async function api(path, options = {}) {
 const get = (path) => api(path);
 const post = (path, body) => api(path, { method: "POST", body: JSON.stringify(body) });
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+function normalizeFingerprintQuality(event) {
+    const value = event?.quality ?? event?.code ?? event?.qualityCode ?? event?.value ?? event;
+    const quality = Number(value);
+    return Number.isInteger(quality) && quality >= 0 && quality <= 100 ? quality : null;
+}
 
 function Button({ children, onClick, variant = "ghost", disabled = false }) {
     return h("button", { className: `button button-${variant}`, disabled, onClick, type: "button" }, children);
@@ -190,20 +198,20 @@ export default function App() {
                 channel = new webSdk.WebChannelClient(new webSdk.WebChannelOptions({}));
                 fingerprintApi = new fingerprintSdk.WebApi(channel);
                 await channel.connect();
-                fingerprintRef.current = { ...fingerprintRef.current, api: fingerprintApi, channel };
+                Object.assign(fingerprintRef.current, { api: fingerprintApi, channel });
             }
             const devices = await fingerprintApi.enumerateDevices();
             const device = devices?.[0] || null;
             const previousDevice = fingerprintRef.current.device;
             const key = (value) => value && (typeof value === "string" ? value : value.deviceId || value.id || value.name || String(value));
             const changed = key(previousDevice) !== key(device);
-            fingerprintRef.current = {
-                ...fingerprintRef.current,
+            Object.assign(fingerprintRef.current, {
                 api: fingerprintApi,
                 channel,
                 device,
                 sample: changed ? null : fingerprintRef.current.sample,
-            };
+            });
+            if (changed) setFingerprintSampleReady(false);
             setReaderError(false);
             if (!silent || changed) {
                 setReaderState(device
@@ -211,7 +219,16 @@ export default function App() {
                     : "Runtime conectado; esperando un lector DigitalPersona.");
             }
         } catch (error) {
-            fingerprintRef.current = { ...fingerprintRef.current, api: null, channel: null, device: null, sample: null };
+            Object.assign(fingerprintRef.current, {
+                api: null,
+                channel: null,
+                device: null,
+                sample: null,
+                capturing: false,
+                stopping: false,
+            });
+            setFingerprintCapturing(false);
+            setFingerprintSampleReady(false);
             setReaderError(true);
             setReaderState(`No se pudo conectar con el runtime DigitalPersona: ${error.message}`);
         } finally {
@@ -230,7 +247,7 @@ export default function App() {
         state.sample = null;
         state.stopping = false;
         setFingerprintSampleReady(false);
-        state.api.onQualityReported = (quality) => { state.quality = quality?.code ?? quality?.qualityCode ?? quality?.value ?? quality; };
+        state.api.onQualityReported = (event) => { state.quality = normalizeFingerprintQuality(event); };
         state.api.onSamplesAcquired = async (event) => {
             if (state.sample || state.stopping) return;
             const sampleData = normalizeSample(event.samples);
