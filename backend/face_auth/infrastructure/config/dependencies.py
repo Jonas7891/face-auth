@@ -7,11 +7,13 @@ from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request
 
+from ...application.ports.in_.user_queries import UserQueriesPort
 from ...application.use_cases.lifecycle import DeleteBiometricData, RevokeBiometricTemplate
 from ...application.use_cases.login_face import LoginFace
 from ...application.use_cases.login_fingerprint import LoginFingerprint
 from ...application.use_cases.register_face import RegisterFace
 from ...application.use_cases.register_fingerprint import RegisterFingerprint
+from ...application.use_cases.user_queries import UserQueries
 from ..persistence.biometric_user_repository import BiometricUserRepository
 from ..persistence.mongodb_biometric_repository import MongoDBBiometricRepository
 from ..persistence.postgres_user_repository import PostgresUserRepository
@@ -77,6 +79,10 @@ def get_biometric_service():
 
 def get_repository() -> BiometricUserRepository:
     return _ensure()["repository"]
+
+
+def get_user_queries(repository=Depends(get_repository)) -> UserQueriesPort:
+    return UserQueries(repository)
 
 
 def get_audit_sink():

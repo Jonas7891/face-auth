@@ -1,30 +1,36 @@
 # Arquitectura — face-auth (Python / FastAPI)
 
-Capas (evolución del layout existente, sin rewrite):
+Capas de arquitectura hexagonal:
 
 ```text
 backend/
 ├── main.py                              # composition root: lifespan, CORS, middleware, routers
 ├── face_auth/
-│   ├── domain/                          # puro: entidades, value_objects, policies, exceptions, ports
+│   ├── domain/                          # puro: entidades, value_objects, policies, exceptions
 │   │   ├── entities/ (User, BiometricSample)
 │   │   ├── value_objects.py             # BiometricModality, TemplateStatus, MatchThreshold, AuditAction
 │   │   ├── policies.py                  # face_match / fingerprint_match, calidad mínima
-│   │   ├── exceptions.py
-│   │   └── ports/out/ (UserRepository + revoke/delete, BiometricService, AuditSink)
-│   ├── application/use_cases/           # RegisterFace, LoginFace, RegisterFingerprint,
-│   │                                    # LoginFingerprint, RevokeBiometricTemplate, DeleteBiometricData
+│   │   └── exceptions.py
+│   ├── application/
+│   │   ├── ports/in_/                   # contratos implementados por casos de uso
+│   │   ├── ports/out/                   # UserRepository, BiometricService, AuditSink
+│   │   └── use_cases/                   # registro, login, consultas y ciclo de vida
 │   └── infrastructure/
-│       ├── config/ (settings.py, dependencies.py — lazy, sin singletons en import)
-│       ├── biometrics/ (opencv_biometric_service.py, mock_biometric_service.py)
-│       ├── persistence/ (postgres_user_repository, mongodb_biometric_repository,
-│       │                 biometric_user_repository — orquesta dual-write PG+Mongo)
-│       ├── security/ (audit.py append-only, rate_limit.py)
-│       ├── observability/ (middleware.py request-id + métricas en memoria)
-│       └── web/ (routers/auth_router.py, routers/lifecycle_router.py,
-│                 auth.py liveness HMAC, schemas/, error_handlers.py)
+│       ├── config/                       # settings y composition root de adaptadores
+│       ├── biometrics/                   # adaptadores OpenCV/face_recognition
+│       ├── persistence/                  # adaptadores PostgreSQL/MongoDB
+│       ├── security/                     # auditoría, rate-limit y seguridad
+│       ├── observability/                # middleware e instrumentación
+│       └── web/                          # adaptador HTTP: routers, schemas y errores
 └── tests/ (test_domain, test_use_cases, test_lifecycle_security, test_api_contract)
 ```
+
+El dominio no conoce FastAPI ni motores de almacenamiento. La aplicación define los
+puertos; los casos de uso dependen de ellos y la infraestructura los implementa.
+`main.py` y `infrastructure/config/dependencies.py` conectan implementaciones. Los
+routers son adaptadores de entrada y delegan las operaciones de consulta y escritura
+a la capa de aplicación. Es una aplicación modular hexagonal, no un conjunto de
+microservicios.
 
 ## Datos
 
@@ -43,3 +49,8 @@ backend/
 - Revocación: `POST /api/templates/{username}/revoke` borra encoding y deja marcador.
 - Supresión: `DELETE /api/subjects/{username}` borra biométricos (Mongo) + desactiva
   identidad (soft-delete Postgres, conserva fila para FK/auditoría).
+- Enrollment de huella: el SDK DigitalPersona captura en el cliente y envía la
+  muestra a `POST /api/register/fingerprint-sample`; el caso de uso delega en el
+  puerto `UserRepository`, implementado por `BiometricUserRepository`, que persiste
+  la identidad en PostgreSQL y la muestra en MongoDB. La muestra se mantiene solo
+  temporalmente en memoria del navegador durante la captura y el envío.

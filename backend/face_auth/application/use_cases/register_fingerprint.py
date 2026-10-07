@@ -1,8 +1,8 @@
 from ...domain.entities.user import User
 from ...domain.entities.biometric_sample import BiometricSample
-from ...domain.ports.out.biometric_service import BiometricService
-from ...domain.ports.out.user_repository import UserRepository
-from ...domain.ports.in_.authentication_use_cases import RegisterFingerprintUseCase
+from ..ports.in_.authentication_use_cases import RegisterFingerprintUseCase
+from ..ports.out.biometric_service import BiometricService
+from ..ports.out.user_repository import UserRepository
 
 
 class RegisterFingerprint(RegisterFingerprintUseCase):

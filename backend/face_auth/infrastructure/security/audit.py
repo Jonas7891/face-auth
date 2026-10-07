@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from ...domain.ports.out.audit_sink import AuditSink
+from ...application.ports.out.audit_sink import AuditSink
 
 try:
     from pymongo.database import Database

@@ -1,11 +1,9 @@
-"""Puertos de salida para auditoría y borrado seguro."""
+"""Append-only audit output port."""
 from abc import ABC, abstractmethod
 from typing import Any
 
 
 class AuditSink(ABC):
-    """Append-only. Nunca actualizar ni borrar desde la app."""
-
     @abstractmethod
     def record(self, action: str, subject: str | None, detail: str = "") -> None:
         raise NotImplementedError

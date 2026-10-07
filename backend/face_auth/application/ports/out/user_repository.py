@@ -1,7 +1,9 @@
+"""Persistence port for identities and biometric samples."""
 from abc import ABC, abstractmethod
 
-from ...entities.biometric_sample import BiometricSample
-from ...entities.user import User
+from ....domain.entities.biometric_sample import BiometricSample
+from ....domain.entities.user import User
+
 
 class UserRepository(ABC):
     @abstractmethod
@@ -38,14 +40,10 @@ class UserRepository(ABC):
     def list_samples(self) -> list[tuple[BiometricSample, User]]:
         raise NotImplementedError
 
-    # --- Ciclo de vida / privacidad (implementación obligatoria en adaptadores) ---
-
     @abstractmethod
     def revoke_face(self, user_id: int) -> None:
-        """Invalida la plantilla facial sin borrar la identidad."""
         raise NotImplementedError
 
     @abstractmethod
     def delete_subject_data(self, user_id: int) -> None:
-        """Borrado efectivo: identidad + plantillas + muestras (GDPR/supresión)."""
         raise NotImplementedError

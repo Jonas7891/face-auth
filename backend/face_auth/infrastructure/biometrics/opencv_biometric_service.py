@@ -8,7 +8,7 @@ import cv2
 import face_recognition
 import numpy as np
 
-from ...domain.ports.out.biometric_service import BiometricService
+from ...application.ports.out.biometric_service import BiometricService
 
 MAX_DECODED_BYTES = 3 * 1024 * 1024
 MAX_IMAGE_PIXELS = 16_000_000

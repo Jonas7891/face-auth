@@ -4,10 +4,11 @@ import pytest
 
 from face_auth.application.use_cases.login_face import LoginFace
 from face_auth.application.use_cases.register_face import RegisterFace
+from face_auth.application.use_cases.user_queries import UserQueries
 from face_auth.domain.entities.biometric_sample import BiometricSample
 from face_auth.domain.entities.user import User
-from face_auth.domain.ports.out.biometric_service import BiometricService
-from face_auth.domain.ports.out.user_repository import UserRepository
+from face_auth.application.ports.out.biometric_service import BiometricService
+from face_auth.application.ports.out.user_repository import UserRepository
 
 
 @dataclass
@@ -115,3 +116,17 @@ def test_login_face_rejects_failed_liveness_check():
 
     with pytest.raises(PermissionError, match="rostro está vivo"):
         use_case.execute("image", ["frame-1", "frame-2", "frame-3"], ["blink"])
+
+
+def test_user_queries_return_directory_data_from_repository():
+    repository = InMemoryUserRepository([User(1, "alice", "[1, 2, 3]", None)])
+    queries = UserQueries(repository)
+
+    assert queries.exists(" alice ") == {"exists": True, "has_face": True, "has_fingerprint": False}
+    assert queries.exists("missing") == {"exists": False}
+    assert queries.list_users() == [{
+        "username": "alice",
+        "has_face": True,
+        "has_fingerprint": False,
+    }]
+    assert queries.list_active_users({"alice"}) == queries.list_users()

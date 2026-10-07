@@ -1,9 +1,10 @@
 """Casos de uso de ciclo de vida: revocación y supresión (privacidad por diseño)."""
 from __future__ import annotations
 
+from ..ports.in_.lifecycle_use_cases import DeleteBiometricDataUseCase, RevokeBiometricTemplateUseCase
 from ...domain.exceptions import BiometricNotFoundError
-from ...domain.ports.out.audit_sink import AuditSink
-from ...domain.ports.out.user_repository import UserRepository
+from ..ports.out.audit_sink import AuditSink
+from ..ports.out.user_repository import UserRepository
 from ...domain.value_objects import AuditAction
 
 
@@ -15,7 +16,7 @@ class _NullAudit(AuditSink):
         return []
 
 
-class RevokeBiometricTemplate:
+class RevokeBiometricTemplate(RevokeBiometricTemplateUseCase):
     """Invalida plantillas sin borrar la identidad (ej. compromiso, re-enrollment)."""
 
     def __init__(self, repository: UserRepository, audit: AuditSink | None = None) -> None:
@@ -34,7 +35,7 @@ class RevokeBiometricTemplate:
         return username
 
 
-class DeleteBiometricData:
+class DeleteBiometricData(DeleteBiometricDataUseCase):
     """Supresión efectiva: identidad + rostro + huellas. Irreversible."""
 
     def __init__(self, repository: UserRepository, audit: AuditSink | None = None) -> None:

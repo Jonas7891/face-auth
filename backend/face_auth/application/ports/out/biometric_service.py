@@ -1,5 +1,7 @@
+"""Port for biometric decoding and matching implementations."""
 from abc import ABC, abstractmethod
 from typing import Any
+
 
 class BiometricService(ABC):
     @abstractmethod

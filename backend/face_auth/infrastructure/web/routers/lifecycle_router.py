@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from ....application.ports.in_.lifecycle_use_cases import DeleteBiometricDataUseCase, RevokeBiometricTemplateUseCase
 from ....application.use_cases.lifecycle import DeleteBiometricData, RevokeBiometricTemplate
 from ....domain.exceptions import BiometricNotFoundError
 from ...config.dependencies import get_audit_sink, get_delete_data, get_revoke_template
@@ -16,7 +17,7 @@ router = APIRouter(tags=["lifecycle"])
 
 
 @router.post("/api/templates/{username}/revoke")
-def revoke_template(username: str, use_case: RevokeBiometricTemplate = Depends(get_revoke_template)) -> dict:
+def revoke_template(username: str, use_case: RevokeBiometricTemplateUseCase = Depends(get_revoke_template)) -> dict:
     try:
         name = use_case.execute(username)
     except BiometricNotFoundError as exc:
@@ -27,7 +28,7 @@ def revoke_template(username: str, use_case: RevokeBiometricTemplate = Depends(g
 
 
 @router.delete("/api/subjects/{username}")
-def delete_subject(username: str, use_case: DeleteBiometricData = Depends(get_delete_data)) -> dict:
+def delete_subject(username: str, use_case: DeleteBiometricDataUseCase = Depends(get_delete_data)) -> dict:
     try:
         name = use_case.execute(username)
     except BiometricNotFoundError as exc:

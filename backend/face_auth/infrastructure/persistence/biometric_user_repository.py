@@ -1,7 +1,7 @@
 from ...domain.entities.biometric_sample import BiometricSample
 from ...domain.entities.user import User
 from ...domain.exceptions import BiometricNotFoundError
-from ...domain.ports.out.user_repository import UserRepository
+from ...application.ports.out.user_repository import UserRepository
 from .mongodb_biometric_repository import MongoDBBiometricRepository
 from .postgres_user_repository import PostgresUserRepository
 

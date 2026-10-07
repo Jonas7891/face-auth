@@ -5,7 +5,8 @@ const API_BASE = import.meta.env.VITE_API_URL || "";
 const ACTION_LABELS = { blink: "Parpadea una vez", turn: "Gira lentamente la cabeza", open_mouth: "Abre y cierra la boca" };
 
 async function api(path, options = {}) {
-    const response = await fetch(`${API_BASE}${path}`, { ...options, headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
+    const url = path.startsWith("http") ? path : `${API_BASE.replace(/\/+$/, "")}${path}`;
+    const response = await fetch(url, { ...options, headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
         const detail = Array.isArray(data.detail) ? data.detail.map((item) => `${item.loc?.join(".") || "campo"}: ${item.msg}`).join("; ") : data.detail;
@@ -235,12 +236,14 @@ export default function App() {
         const name = username.trim(); const sample = fingerprintRef.current.sample;
         if (!name) throw new Error("Escribe un usuario para asociar la huella."); if (!sample) throw new Error("Captura una huella primero.");
         const data = await post("/api/register/fingerprint-sample", { username: name, sample_format: sample.format, data_base64: sample.data, quality: sample.quality });
-        setStatus(data.message, "ok"); setReaderState("Muestra guardada."); await loadUsers();
+        fingerprintRef.current.sample = null;
+        setStatus(data.message, "ok"); setReaderState("Muestra guardada en el servidor."); await loadUsers();
     });
 
     const loginFingerprint = () => run(async () => {
         const sample = fingerprintRef.current.sample; if (!sample) throw new Error("Captura una huella primero.");
         const data = await post("/api/login/fingerprint-sample", { sample_format: sample.format, data_base64: sample.data, quality: sample.quality });
+        fingerprintRef.current.sample = null;
         setStatus(`Login OK: ${data.username}`, "ok"); await loadUsers();
     });
 

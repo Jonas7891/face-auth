@@ -1,9 +1,9 @@
 import json
 from typing import Any
 
-from ...domain.ports.out.biometric_service import BiometricService
-from ...domain.ports.out.user_repository import UserRepository
-from ...domain.ports.in_.authentication_use_cases import LoginFaceUseCase
+from ..ports.in_.authentication_use_cases import LoginFaceUseCase
+from ..ports.out.biometric_service import BiometricService
+from ..ports.out.user_repository import UserRepository
 
 
 class LoginFace(LoginFaceUseCase):

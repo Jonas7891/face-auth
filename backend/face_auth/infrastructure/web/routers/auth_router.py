@@ -2,12 +2,12 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+from ....application.ports.in_.user_queries import UserQueriesPort
 from ....application.use_cases.login_face import LoginFace
 from ....application.use_cases.login_fingerprint import LoginFingerprint
 from ....application.use_cases.register_face import RegisterFace
 from ....application.use_cases.register_fingerprint import RegisterFingerprint
-from ....domain.ports.out.biometric_service import BiometricService
-from ....domain.ports.out.user_repository import UserRepository
+from ....application.ports.out.biometric_service import BiometricService
 from ...config.dependencies import (
     database_is_ready,
     get_audit_sink,
@@ -16,8 +16,8 @@ from ...config.dependencies import (
     get_login_fingerprint,
     get_register_face,
     get_register_fingerprint,
-    get_repository,
     get_session_service,
+    get_user_queries,
     rate_limit,
 )
 from ....domain.exceptions import DuplicateUserError
@@ -98,11 +98,8 @@ def liveness_step(payload: LivenessStepRequest, biometric_service: BiometricServ
 
 
 @router.get("/api/users/{username}/exists")
-def user_exists(username: str, repository: UserRepository = Depends(get_repository)) -> dict:
-    user = repository.get_by_username(username.strip())
-    if user is None:
-        return {"exists": False}
-    return {"exists": True, "has_face": user.face_encoding is not None, "has_fingerprint": repository.has_fingerprint(user.id)}
+def user_exists(username: str, queries: UserQueriesPort = Depends(get_user_queries)) -> dict:
+    return queries.exists(username)
 
 
 @router.post("/api/register/face", dependencies=[Depends(rate_limit("register_face"))])
@@ -215,15 +212,10 @@ def auth_me(request: Request, audit=Depends(get_audit_sink)) -> dict:
 
 
 @router.get("/api/users")
-def list_users(repository: UserRepository = Depends(get_repository)) -> list[dict]:
-    return [{"username": user.username, "has_face": user.face_encoding is not None, "has_fingerprint": repository.has_fingerprint(user.id)} for user in repository.list_users()]
+def list_users(queries: UserQueriesPort = Depends(get_user_queries)) -> list[dict]:
+    return queries.list_users()
 
 
 @router.get("/api/users/active")
-def list_active_users(repository: UserRepository = Depends(get_repository)) -> list[dict]:
-    active_usernames = set(active_session_usernames())
-    return [
-        {"username": user.username, "has_face": user.face_encoding is not None, "has_fingerprint": repository.has_fingerprint(user.id)}
-        for user in repository.list_users()
-        if user.username in active_usernames
-    ]
+def list_active_users(queries: UserQueriesPort = Depends(get_user_queries)) -> list[dict]:
+    return queries.list_active_users(set(active_session_usernames()))

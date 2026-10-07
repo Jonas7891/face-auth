@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ...domain.ports.out.biometric_service import BiometricService
+from ...application.ports.out.biometric_service import BiometricService
 
 
 class MockBiometricService(BiometricService):
